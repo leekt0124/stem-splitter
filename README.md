@@ -4,39 +4,43 @@ Split any song into stems — vocals, drums, bass, guitar, piano — using
 [Demucs v4](https://github.com/facebookresearch/demucs) (Meta's hybrid
 transformer source-separation model), wrapped in a simple web UI.
 
-<!-- TODO: replace with a GIF of the app separating a song -->
-<!-- ![demo](docs/demo.gif) -->
+![demo](docs/demo.gif)
+
+*The stem mixer: solo the vocals, mute the drums, ride the bass fader, click a waveform to seek — all stems stay in sample-accurate sync.*
 
 ## Features
 
 - 🎤 4-stem separation (vocals / drums / bass / other) with `htdemucs_ft`
 - 🎸 6-stem mode (adds guitar and piano) with `htdemucs_6s`
+- 🎚️ Web-based stem mixer: per-stem volume / mute / solo, synced waveforms, click-to-seek, per-stem download
 - 🔒 Runs fully locally — your audio never leaves your machine
-- ⚡ GPU-accelerated when CUDA is available (a 4-minute song takes ~15 s on a modern GPU, a few minutes on CPU)
+- ⚡ GPU-accelerated when CUDA is available (a 3-minute song separates in seconds on a modern GPU, a few minutes on CPU)
 
 ## Quickstart
 
-Requires Python ≥ 3.10 and [ffmpeg](https://ffmpeg.org/) on your PATH.
+Requires Python ≥ 3.10, [ffmpeg](https://ffmpeg.org/) on your PATH, and Node ≥ 18 (only to build the mixer frontend).
 
 ```bash
 git clone https://github.com/leekt0124/stem-splitter.git
 cd stem-splitter
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-python app.py
+
+# build the mixer frontend once
+(cd frontend && npm install && npm run build)
+
+uvicorn api:app --port 8000
 ```
 
-Open http://localhost:7860, upload a song, hit **Separate**.
+Open http://localhost:8000, drop in a song, and mix.
 Model weights (~300 MB–1 GB depending on the model) are downloaded
 automatically on first use and cached under `~/.cache/torch`.
 
+There is also a simpler Gradio UI (no Node needed): `python app.py` → http://localhost:7860.
+
 ## REST API
 
-There is also a FastAPI backend (the base for a custom stem-mixer frontend):
-
-```bash
-uvicorn api:app --port 8000
-```
+The FastAPI server that powers the mixer is also usable directly:
 
 ```bash
 # submit a job
@@ -50,20 +54,25 @@ curl -O localhost:8000/api/jobs/9954a4b415d9/stems/vocals   # download a stem
 ## How it works
 
 ```
-app.py (Gradio UI)      api.py (FastAPI, async jobs)
-        └──────────┬──────────┘
-             separator/  (framework-independent core)
-                  └── demucs  →  one wav per stem in output/<song>/<model>/
+frontend/ (React stem mixer)     app.py (Gradio UI)
+   Web Audio GainNode per stem        │
+        │ REST                        │
+   api.py (FastAPI, async jobs) ──────┤
+                                      │
+                        separator/  (framework-independent core)
+                             └── demucs  →  one wav per stem in output/<song>/<model>/
 ```
 
-The separation core is deliberately UI-agnostic so both frontends (and a
-future stem-mixer web app) share it unchanged.
+The mixer decodes each stem into an `AudioBuffer` and plays them through
+per-stem `GainNode`s on one `AudioContext` clock, so solo/mute/volume are
+instant and everything stays in sync.
 
 ## Roadmap
 
 - [x] Gradio MVP: upload → separate → play/download stems
 - [x] FastAPI backend (async jobs, stem download API)
-- [ ] Custom web frontend: synchronized multi-stem mixer (solo/mute/volume, waveforms)
+- [x] React stem mixer: synchronized playback, solo/mute/volume, waveforms, seek
+- [ ] Export the adjusted mix
 - [ ] Pitch shift / time stretch
 - [ ] Beat grid + metronome, chord detection
 - [ ] Lyrics transcription (Whisper on the vocal stem)

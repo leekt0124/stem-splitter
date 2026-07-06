@@ -15,3 +15,7 @@ uploads/
 # gradio
 .gradio/
 flagged/
+
+# frontend
+node_modules/
+frontend/dist/

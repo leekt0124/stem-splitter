@@ -112,3 +112,11 @@ def download_stem(job_id: str, stem: str):
     if path is None:
         raise HTTPException(404, f"No stem {stem!r} for this job")
     return FileResponse(path, media_type="audio/wav", filename=f"{stem}.wav")
+
+
+# serve the built React mixer, if present (run `npm run build` in frontend/)
+_frontend_dist = Path(__file__).parent / "frontend" / "dist"
+if _frontend_dist.is_dir():
+    from fastapi.staticfiles import StaticFiles
+
+    app.mount("/", StaticFiles(directory=_frontend_dist, html=True), name="frontend")
