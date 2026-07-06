@@ -1,0 +1,20 @@
+services:
+  stem-splitter:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      # persist downloaded model weights across container restarts
+      - model-cache:/root/.cache
+    # uncomment to use an NVIDIA GPU (requires nvidia-container-toolkit);
+    # without it, separation runs on CPU (a few minutes per song)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+volumes:
+  model-cache:

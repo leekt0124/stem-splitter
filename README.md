@@ -20,7 +20,23 @@ transformer source-separation model), wrapped in a simple web UI.
 - 🔒 Runs fully locally — your audio never leaves your machine
 - ⚡ GPU-accelerated when CUDA is available (a 3-minute song separates in seconds on a modern GPU, a few minutes on CPU)
 
-## Quickstart
+## Quickstart (Docker)
+
+The easiest way to run it — no Python/Node setup:
+
+```bash
+git clone https://github.com/leekt0124/stem-splitter.git
+cd stem-splitter
+docker compose up --build      # then open http://localhost:8000
+```
+
+Separation runs on CPU by default (a few minutes per song). With an NVIDIA
+GPU and [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html),
+uncomment the `deploy:` block in `docker-compose.yml` for seconds-per-song
+separation. Model weights download on first use into a named volume, so
+updates (`git pull && docker compose up --build`) never re-download them.
+
+## Quickstart (local)
 
 Requires Python ≥ 3.10, [ffmpeg](https://ffmpeg.org/) on your PATH, and Node ≥ 18 (only to build the mixer frontend).
 
