@@ -43,11 +43,20 @@ _gpu_lock = threading.Lock()
 def _run_job(job_id: str, audio_path: Path, model_name: str) -> None:
     job = jobs[job_id]
     job["status"] = "running"
+
+    def on_progress(frac: float) -> None:
+        job["progress"] = round(frac, 3)
+
     try:
         with _gpu_lock:
             stems = separate(
-                audio_path, model_name, out_dir=OUTPUT_DIR / job_id, show_progress=False
+                audio_path,
+                model_name,
+                out_dir=OUTPUT_DIR / job_id,
+                show_progress=False,
+                progress_callback=on_progress,
             )
+        job["progress"] = 1.0
         job["stems"] = {name: str(path) for name, path in stems.items()}
         job["status"] = "done"
     except Exception as exc:  # surface the failure to the client instead of a stuck job
@@ -93,6 +102,7 @@ def submit(
         "model": model,
         "stems": {},
         "error": None,
+        "progress": 0.0,
         "analysis": None,
         "analysis_status": "pending",
     }
@@ -111,6 +121,7 @@ def job_status(job_id: str):
         "filename": job["filename"],
         "model": job["model"],
         "stems": sorted(job["stems"]),
+        "progress": job["progress"],
         "error": job["error"],
     }
 

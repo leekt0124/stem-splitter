@@ -5,7 +5,7 @@ import { StemEngine } from './engine'
 
 type Phase =
   | { kind: 'idle' }
-  | { kind: 'processing'; label: string }
+  | { kind: 'processing'; label: string; progress?: number }
   | { kind: 'ready'; jobId: string; filename: string }
   | { kind: 'error'; message: string }
 
@@ -37,10 +37,15 @@ export default function App() {
       setPhase({ kind: 'processing', label: 'Uploading…' })
       const jobId = await submitJob(file, model)
 
-      setPhase({ kind: 'processing', label: 'Separating stems… (GPU: seconds, CPU: minutes)' })
+      setPhase({ kind: 'processing', label: 'Separating stems…', progress: 0 })
       let job = await getJob(jobId)
       while (job.status === 'queued' || job.status === 'running') {
-        await new Promise((r) => setTimeout(r, 1500))
+        setPhase({
+          kind: 'processing',
+          label: job.status === 'queued' ? 'Waiting for a free slot…' : 'Separating stems…',
+          progress: job.progress,
+        })
+        await new Promise((r) => setTimeout(r, 1000))
         job = await getJob(jobId)
       }
       if (job.status === 'error') throw new Error(job.error ?? 'separation failed')
@@ -111,7 +116,17 @@ export default function App() {
 
       {phase.kind === 'processing' && (
         <div className="status">
-          <div className="spinner" />
+          {phase.progress !== undefined ? (
+            <div className="progress-track">
+              <div
+                className="progress-fill"
+                style={{ width: `${Math.round(phase.progress * 100)}%` }}
+              />
+              <span className="progress-label">{Math.round(phase.progress * 100)}%</span>
+            </div>
+          ) : (
+            <div className="spinner" />
+          )}
           <div>{phase.label}</div>
         </div>
       )}

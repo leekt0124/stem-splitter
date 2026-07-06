@@ -4,6 +4,7 @@ export interface JobStatus {
   filename: string
   model: string
   stems: string[]
+  progress: number
   error: string | null
 }
 
