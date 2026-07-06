@@ -30,21 +30,39 @@ Open http://localhost:7860, upload a song, hit **Separate**.
 Model weights (~300 MB–1 GB depending on the model) are downloaded
 automatically on first use and cached under `~/.cache/torch`.
 
+## REST API
+
+There is also a FastAPI backend (the base for a custom stem-mixer frontend):
+
+```bash
+uvicorn api:app --port 8000
+```
+
+```bash
+# submit a job
+curl -X POST localhost:8000/api/separate -F "file=@song.mp3" -F "model=htdemucs_ft"
+# -> {"job_id": "9954a4b415d9"}
+
+curl localhost:8000/api/jobs/9954a4b415d9            # poll: queued / running / done
+curl -O localhost:8000/api/jobs/9954a4b415d9/stems/vocals   # download a stem
+```
+
 ## How it works
 
 ```
-app.py (Gradio UI)
-   └── separator/  (framework-independent core)
-          └── demucs.api.Separator  →  one wav per stem in output/<song>/<model>/
+app.py (Gradio UI)      api.py (FastAPI, async jobs)
+        └──────────┬──────────┘
+             separator/  (framework-independent core)
+                  └── demucs  →  one wav per stem in output/<song>/<model>/
 ```
 
-The separation core is deliberately UI-agnostic so a future FastAPI backend
-and custom stem-mixer frontend can reuse it unchanged.
+The separation core is deliberately UI-agnostic so both frontends (and a
+future stem-mixer web app) share it unchanged.
 
 ## Roadmap
 
 - [x] Gradio MVP: upload → separate → play/download stems
-- [ ] FastAPI backend (async jobs, progress API)
+- [x] FastAPI backend (async jobs, stem download API)
 - [ ] Custom web frontend: synchronized multi-stem mixer (solo/mute/volume, waveforms)
 - [ ] Pitch shift / time stretch
 - [ ] Beat grid + metronome, chord detection

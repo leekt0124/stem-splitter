@@ -6,6 +6,7 @@ __pycache__/
 
 # separated stems and uploaded audio
 output/
+uploads/
 *.mp3
 *.wav
 *.flac
