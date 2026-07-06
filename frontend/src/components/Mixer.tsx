@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import StemLane from './StemLane'
 import Timeline from './Timeline'
+import LyricsPanel from './LyricsPanel'
 import { StemEngine } from '../engine'
-import { getAnalysis, stemUrl, type Analysis } from '../api'
+import { getAnalysis, getLyrics, stemUrl, type Analysis, type Lyrics } from '../api'
 import { sortStems } from '../stems'
 
 const SPEEDS = [0.5, 0.75, 0.9, 1, 1.1, 1.25, 1.5]
@@ -31,6 +32,8 @@ export default function Mixer({ jobId, filename, engine, onReset }: Props) {
   const [speed, setSpeed] = useState(1)
   const [metronome, setMetronome] = useState(false)
   const [analysis, setAnalysis] = useState<Analysis | null>(null)
+  const [lyrics, setLyrics] = useState<Lyrics | null>(null)
+  const [showLyrics, setShowLyrics] = useState(true)
   const raf = useRef(0)
 
   const audible = (s: string) =>
@@ -41,19 +44,27 @@ export default function Mixer({ jobId, filename, engine, onReset }: Props) {
     for (const s of stems) engine.setGain(s, audible(s) ? volumes[s] : 0)
   }, [volumes, muted, solo]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // poll for tempo/beats/chords until the backend finishes analyzing
+  // poll for tempo/beats/chords and lyrics until the backend finishes
   useEffect(() => {
     let stop = false
     const poll = async () => {
-      for (let i = 0; i < 90 && !stop; i++) {
+      let wantAnalysis = true
+      let wantLyrics = true
+      for (let i = 0; i < 150 && !stop && (wantAnalysis || wantLyrics); i++) {
         try {
-          const res = await getAnalysis(jobId)
-          if (res.status === 'done' && res.analysis) {
-            engine.beats = res.analysis.beats
-            setAnalysis(res.analysis)
-            return
+          if (wantAnalysis) {
+            const res = await getAnalysis(jobId)
+            if (res.status === 'done' && res.analysis) {
+              engine.beats = res.analysis.beats
+              setAnalysis(res.analysis)
+            }
+            if (res.status !== 'pending') wantAnalysis = false
           }
-          if (res.status === 'error') return
+          if (wantLyrics) {
+            const res = await getLyrics(jobId)
+            if (res.status === 'done' && res.lyrics?.lines.length) setLyrics(res.lyrics)
+            if (res.status !== 'pending') wantLyrics = false
+          }
         } catch {
           /* server briefly unreachable; retry */
         }
@@ -174,6 +185,16 @@ export default function Mixer({ jobId, filename, engine, onReset }: Props) {
           🕐 click
         </button>
 
+        {lyrics && (
+          <button
+            className={`chip ${showLyrics ? 'chip-active-solo' : ''}`}
+            onClick={() => setShowLyrics(!showLyrics)}
+            title="Show/hide lyrics (transcribed from the vocal stem)"
+          >
+            🎤 lyrics
+          </button>
+        )}
+
         {analysis && analysis.tempo > 0 && (
           <span className="badge">{Math.round(analysis.tempo)} bpm</span>
         )}
@@ -199,6 +220,10 @@ export default function Mixer({ jobId, filename, engine, onReset }: Props) {
           position={position}
           onSeek={(t) => engine.seek(t)}
         />
+      )}
+
+      {lyrics && showLyrics && (
+        <LyricsPanel lines={lyrics.lines} position={position} onSeek={(t) => engine.seek(t)} />
       )}
 
       {stems.map((s) => (

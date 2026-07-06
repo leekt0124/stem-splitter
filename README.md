@@ -16,6 +16,7 @@ transformer source-separation model), wrapped in a simple web UI.
 - 🎼 Pitch shift (±6 semitones) and playback speed (0.5×–1.5×) — live, without stopping playback ([Signalsmith Stretch](https://github.com/Signalsmith-Audio/signalsmith-stretch))
 - 🥁 Automatic tempo + beat detection (on the isolated drums) with a metronome click
 - 🎹 Chord detection (on the drum-free mix) shown as a clickable timeline
+- 🎤 Synced lyrics, transcribed by Whisper from the *isolated vocals* (far more accurate than on the full mix) — karaoke-style highlighting, click a line to jump there
 - 💾 Export your adjusted mix as wav — rendered in the browser at the current pitch/speed
 - 🔒 Runs fully locally — your audio never leaves your machine
 - ⚡ GPU-accelerated when CUDA is available (a 3-minute song separates in seconds on a modern GPU, a few minutes on CPU)
@@ -70,6 +71,7 @@ curl -X POST localhost:8000/api/separate -F "file=@song.mp3" -F "model=htdemucs_
 curl localhost:8000/api/jobs/9954a4b415d9            # poll: queued / running / done
 curl -O localhost:8000/api/jobs/9954a4b415d9/stems/vocals   # download a stem
 curl localhost:8000/api/jobs/9954a4b415d9/analysis   # tempo, beat times, chord timeline
+curl localhost:8000/api/jobs/9954a4b415d9/lyrics     # Whisper transcript of the vocal stem
 ```
 
 ## How it works
@@ -96,7 +98,9 @@ instant and everything stays in sync.
 - [x] Export the adjusted mix as wav (rendered in-browser with OfflineAudioContext)
 - [x] Pitch shift / time stretch (Signalsmith Stretch AudioWorklet)
 - [x] Beat grid + metronome, chord detection (librosa on the separated stems)
-- [ ] Lyrics transcription (Whisper on the vocal stem)
+- [x] Lyrics transcription (Whisper on the vocal stem), synced karaoke view
+- [ ] Loop sections (A/B repeat) for practice
+- [ ] Downbeat detection for a bar-aware metronome
 
 ## Acknowledgements
 

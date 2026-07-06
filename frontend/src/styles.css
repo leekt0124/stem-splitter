@@ -264,6 +264,39 @@ select {
   background: rgba(255, 255, 255, 0.25);
 }
 
+/* lyrics */
+.lyrics {
+  max-height: 168px;
+  overflow-y: auto;
+  background: #12151d;
+  border: 1px solid #232838;
+  border-radius: 10px;
+  padding: 10px 16px;
+  margin-bottom: 12px;
+  scrollbar-width: thin;
+}
+
+.lyric-line {
+  padding: 3px 0;
+  color: #6b7183;
+  font-size: 14px;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.lyric-line:hover {
+  color: #aab2c5;
+}
+
+.lyric-past {
+  color: #464c5c;
+}
+
+.lyric-current {
+  color: #f4f6fb;
+  font-weight: 600;
+}
+
 .playhead {
   position: absolute;
   top: 0;

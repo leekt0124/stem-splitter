@@ -18,6 +18,7 @@ from fastapi.responses import FileResponse
 
 from separator import DEFAULT_MODEL, MODELS, separate
 from separator.analysis import analyze
+from separator.lyrics import transcribe
 
 UPLOAD_DIR = Path("uploads")
 OUTPUT_DIR = Path("output")
@@ -64,13 +65,24 @@ def _run_job(job_id: str, audio_path: Path, model_name: str) -> None:
         job["error"] = str(exc)
         return
 
-    # stems are usable now; tempo/beats/chords arrive when ready
+    # stems are usable now; tempo/beats/chords and lyrics arrive when ready
     try:
         job["analysis"] = analyze(stems)
         job["analysis_status"] = "done"
     except Exception as exc:
         job["analysis_status"] = "error"
         job["error"] = f"analysis failed: {exc}"
+
+    if "vocals" in stems:
+        try:
+            with _gpu_lock:  # whisper shares the GPU with separation jobs
+                job["lyrics"] = transcribe(stems["vocals"])
+            job["lyrics_status"] = "done"
+        except Exception as exc:
+            job["lyrics_status"] = "error"
+            job["error"] = f"lyrics failed: {exc}"
+    else:
+        job["lyrics_status"] = "done"
 
 
 @app.get("/api/models")
@@ -105,6 +117,8 @@ def submit(
         "progress": 0.0,
         "analysis": None,
         "analysis_status": "pending",
+        "lyrics": None,
+        "lyrics_status": "pending",
     }
     background_tasks.add_task(_run_job, job_id, audio_path, model)
     return {"job_id": job_id}
@@ -132,6 +146,14 @@ def job_analysis(job_id: str):
     if job is None:
         raise HTTPException(404, "No such job")
     return {"status": job["analysis_status"], "analysis": job["analysis"]}
+
+
+@app.get("/api/jobs/{job_id}/lyrics")
+def job_lyrics(job_id: str):
+    job = jobs.get(job_id)
+    if job is None:
+        raise HTTPException(404, "No such job")
+    return {"status": job["lyrics_status"], "lyrics": job["lyrics"]}
 
 
 @app.get("/api/jobs/{job_id}/stems/{stem}")

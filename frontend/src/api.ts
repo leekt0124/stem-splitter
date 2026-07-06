@@ -49,4 +49,20 @@ export const getAnalysis = (id: string) =>
     json<{ status: 'pending' | 'done' | 'error'; analysis: Analysis | null }>(r),
   )
 
+export interface LyricLine {
+  start: number
+  end: number
+  text: string
+}
+
+export interface Lyrics {
+  language: string | null
+  lines: LyricLine[]
+}
+
+export const getLyrics = (id: string) =>
+  fetch(`/api/jobs/${id}/lyrics`).then((r) =>
+    json<{ status: 'pending' | 'done' | 'error'; lyrics: Lyrics | null }>(r),
+  )
+
 export const stemUrl = (id: string, stem: string) => `/api/jobs/${id}/stems/${stem}`
