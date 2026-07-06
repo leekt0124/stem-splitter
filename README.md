@@ -13,7 +13,10 @@ transformer source-separation model), wrapped in a simple web UI.
 - 🎤 4-stem separation (vocals / drums / bass / other) with `htdemucs_ft`
 - 🎸 6-stem mode (adds guitar and piano) with `htdemucs_6s`
 - 🎚️ Web-based stem mixer: per-stem volume / mute / solo, synced waveforms, click-to-seek, per-stem download
-- 💾 Export your adjusted mix as wav — rendered instantly in the browser
+- 🎼 Pitch shift (±6 semitones) and playback speed (0.5×–1.5×) — live, without stopping playback ([Signalsmith Stretch](https://github.com/Signalsmith-Audio/signalsmith-stretch))
+- 🥁 Automatic tempo + beat detection (on the isolated drums) with a metronome click
+- 🎹 Chord detection (on the drum-free mix) shown as a clickable timeline
+- 💾 Export your adjusted mix as wav — rendered in the browser at the current pitch/speed
 - 🔒 Runs fully locally — your audio never leaves your machine
 - ⚡ GPU-accelerated when CUDA is available (a 3-minute song separates in seconds on a modern GPU, a few minutes on CPU)
 
@@ -50,6 +53,7 @@ curl -X POST localhost:8000/api/separate -F "file=@song.mp3" -F "model=htdemucs_
 
 curl localhost:8000/api/jobs/9954a4b415d9            # poll: queued / running / done
 curl -O localhost:8000/api/jobs/9954a4b415d9/stems/vocals   # download a stem
+curl localhost:8000/api/jobs/9954a4b415d9/analysis   # tempo, beat times, chord timeline
 ```
 
 ## How it works
@@ -74,8 +78,8 @@ instant and everything stays in sync.
 - [x] FastAPI backend (async jobs, stem download API)
 - [x] React stem mixer: synchronized playback, solo/mute/volume, waveforms, seek
 - [x] Export the adjusted mix as wav (rendered in-browser with OfflineAudioContext)
-- [ ] Pitch shift / time stretch
-- [ ] Beat grid + metronome, chord detection
+- [x] Pitch shift / time stretch (Signalsmith Stretch AudioWorklet)
+- [x] Beat grid + metronome, chord detection (librosa on the separated stems)
 - [ ] Lyrics transcription (Whisper on the vocal stem)
 
 ## Acknowledgements

@@ -49,6 +49,7 @@ export default function App() {
       const engine = new StemEngine()
       await Promise.all(job.stems.map((s) => engine.load(s, stemUrl(jobId, s))))
       engineRef.current = engine
+      ;(window as unknown as { __engine: StemEngine }).__engine = engine // for e2e tests
       setPhase({ kind: 'ready', jobId, filename: job.filename })
     } catch (e) {
       setPhase({ kind: 'error', message: String(e) })

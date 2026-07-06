@@ -31,4 +31,21 @@ export async function submitJob(file: File, model: string): Promise<string> {
 
 export const getJob = (id: string) => fetch(`/api/jobs/${id}`).then((r) => json<JobStatus>(r))
 
+export interface ChordSegment {
+  start: number
+  end: number
+  label: string
+}
+
+export interface Analysis {
+  tempo: number
+  beats: number[]
+  chords: ChordSegment[]
+}
+
+export const getAnalysis = (id: string) =>
+  fetch(`/api/jobs/${id}/analysis`).then((r) =>
+    json<{ status: 'pending' | 'done' | 'error'; analysis: Analysis | null }>(r),
+  )
+
 export const stemUrl = (id: string, stem: string) => `/api/jobs/${id}/stems/${stem}`

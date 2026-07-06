@@ -19,3 +19,5 @@ flagged/
 # frontend
 node_modules/
 frontend/dist/
+# vendored at build time by the `vendor` npm script
+frontend/public/signalsmith-stretch.mjs

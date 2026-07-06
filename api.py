@@ -17,6 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from separator import DEFAULT_MODEL, MODELS, separate
+from separator.analysis import analyze
 
 UPLOAD_DIR = Path("uploads")
 OUTPUT_DIR = Path("output")
@@ -52,6 +53,15 @@ def _run_job(job_id: str, audio_path: Path, model_name: str) -> None:
     except Exception as exc:  # surface the failure to the client instead of a stuck job
         job["status"] = "error"
         job["error"] = str(exc)
+        return
+
+    # stems are usable now; tempo/beats/chords arrive when ready
+    try:
+        job["analysis"] = analyze(stems)
+        job["analysis_status"] = "done"
+    except Exception as exc:
+        job["analysis_status"] = "error"
+        job["error"] = f"analysis failed: {exc}"
 
 
 @app.get("/api/models")
@@ -83,6 +93,8 @@ def submit(
         "model": model,
         "stems": {},
         "error": None,
+        "analysis": None,
+        "analysis_status": "pending",
     }
     background_tasks.add_task(_run_job, job_id, audio_path, model)
     return {"job_id": job_id}
@@ -101,6 +113,14 @@ def job_status(job_id: str):
         "stems": sorted(job["stems"]),
         "error": job["error"],
     }
+
+
+@app.get("/api/jobs/{job_id}/analysis")
+def job_analysis(job_id: str):
+    job = jobs.get(job_id)
+    if job is None:
+        raise HTTPException(404, "No such job")
+    return {"status": job["analysis_status"], "analysis": job["analysis"]}
 
 
 @app.get("/api/jobs/{job_id}/stems/{stem}")

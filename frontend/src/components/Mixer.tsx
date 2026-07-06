@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import StemLane from './StemLane'
+import Timeline from './Timeline'
 import { StemEngine } from '../engine'
-import { stemUrl } from '../api'
+import { getAnalysis, stemUrl, type Analysis } from '../api'
 import { sortStems } from '../stems'
+
+const SPEEDS = [0.5, 0.75, 0.9, 1, 1.1, 1.25, 1.5]
 
 const fmt = (t: number) =>
   `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`
@@ -24,6 +27,10 @@ export default function Mixer({ jobId, filename, engine, onReset }: Props) {
   const [playing, setPlaying] = useState(false)
   const [position, setPosition] = useState(0)
   const [exporting, setExporting] = useState(false)
+  const [semitones, setSemitones] = useState(0)
+  const [speed, setSpeed] = useState(1)
+  const [metronome, setMetronome] = useState(false)
+  const [analysis, setAnalysis] = useState<Analysis | null>(null)
   const raf = useRef(0)
 
   const audible = (s: string) =>
@@ -33,6 +40,31 @@ export default function Mixer({ jobId, filename, engine, onReset }: Props) {
   useEffect(() => {
     for (const s of stems) engine.setGain(s, audible(s) ? volumes[s] : 0)
   }, [volumes, muted, solo]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // poll for tempo/beats/chords until the backend finishes analyzing
+  useEffect(() => {
+    let stop = false
+    const poll = async () => {
+      for (let i = 0; i < 90 && !stop; i++) {
+        try {
+          const res = await getAnalysis(jobId)
+          if (res.status === 'done' && res.analysis) {
+            engine.beats = res.analysis.beats
+            setAnalysis(res.analysis)
+            return
+          }
+          if (res.status === 'error') return
+        } catch {
+          /* server briefly unreachable; retry */
+        }
+        await new Promise((r) => setTimeout(r, 2000))
+      }
+    }
+    void poll()
+    return () => {
+      stop = true
+    }
+  }, [jobId, engine])
 
   // playhead loop; auto-stop at the end of the song
   useEffect(() => {
@@ -58,6 +90,22 @@ export default function Mixer({ jobId, filename, engine, onReset }: Props) {
     }
   }
 
+  const changePitch = (delta: number) => {
+    const next = Math.max(-6, Math.min(6, semitones + delta))
+    setSemitones(next)
+    engine.setTransform(next, speed)
+  }
+
+  const changeSpeed = (next: number) => {
+    setSpeed(next)
+    engine.setTransform(semitones, next)
+  }
+
+  const toggleMetronome = () => {
+    engine.setMetronome(!metronome)
+    setMetronome(!metronome)
+  }
+
   const toggleIn = (set: Set<string>, s: string) => {
     const next = new Set(set)
     next.has(s) ? next.delete(s) : next.add(s)
@@ -80,6 +128,8 @@ export default function Mixer({ jobId, filename, engine, onReset }: Props) {
     }
   }
 
+  const currentChord = analysis?.chords.find((c) => position >= c.start && position < c.end)
+
   return (
     <div className="mixer">
       <div className="transport">
@@ -89,6 +139,48 @@ export default function Mixer({ jobId, filename, engine, onReset }: Props) {
         <span className="time">
           {fmt(position)} / {fmt(engine.duration)}
         </span>
+
+        <span className="control-group" title="Pitch shift (semitones)">
+          <button className="chip" onClick={() => changePitch(-1)}>
+            −
+          </button>
+          <span className="control-value">
+            {semitones > 0 ? `+${semitones}` : semitones} st
+          </span>
+          <button className="chip" onClick={() => changePitch(1)}>
+            +
+          </button>
+        </span>
+
+        <select
+          className="speed-select"
+          title="Playback speed"
+          value={speed}
+          onChange={(e) => changeSpeed(Number(e.target.value))}
+        >
+          {SPEEDS.map((s) => (
+            <option key={s} value={s}>
+              {s}×
+            </option>
+          ))}
+        </select>
+
+        <button
+          className={`chip ${metronome ? 'chip-active-solo' : ''}`}
+          onClick={toggleMetronome}
+          disabled={!analysis || analysis.beats.length === 0}
+          title="Metronome click on detected beats"
+        >
+          🕐 click
+        </button>
+
+        {analysis && analysis.tempo > 0 && (
+          <span className="badge">{Math.round(analysis.tempo)} bpm</span>
+        )}
+        {currentChord && currentChord.label !== 'N' && (
+          <span className="badge badge-chord">{currentChord.label}</span>
+        )}
+
         <span className="song-name" title={filename}>
           {filename}
         </span>
@@ -99,6 +191,16 @@ export default function Mixer({ jobId, filename, engine, onReset }: Props) {
           ✕ new song
         </button>
       </div>
+
+      {analysis && (
+        <Timeline
+          analysis={analysis}
+          duration={engine.duration}
+          position={position}
+          onSeek={(t) => engine.seek(t)}
+        />
+      )}
+
       {stems.map((s) => (
         <StemLane
           key={s}
