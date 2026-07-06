@@ -23,6 +23,7 @@ export default function Mixer({ jobId, filename, engine, onReset }: Props) {
   const [solo, setSolo] = useState<Set<string>>(new Set())
   const [playing, setPlaying] = useState(false)
   const [position, setPosition] = useState(0)
+  const [exporting, setExporting] = useState(false)
   const raf = useRef(0)
 
   const audible = (s: string) =>
@@ -63,6 +64,22 @@ export default function Mixer({ jobId, filename, engine, onReset }: Props) {
     return next
   }
 
+  const exportMix = async () => {
+    setExporting(true)
+    try {
+      const gains = Object.fromEntries(stems.map((s) => [s, audible(s) ? volumes[s] : 0]))
+      const blob = await engine.exportMix(gains)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${filename.replace(/\.[^.]+$/, '')}_mix.wav`
+      a.click()
+      URL.revokeObjectURL(url)
+    } finally {
+      setExporting(false)
+    }
+  }
+
   return (
     <div className="mixer">
       <div className="transport">
@@ -75,6 +92,9 @@ export default function Mixer({ jobId, filename, engine, onReset }: Props) {
         <span className="song-name" title={filename}>
           {filename}
         </span>
+        <button className="chip" onClick={exportMix} disabled={exporting}>
+          {exporting ? 'rendering…' : '⬇ export mix'}
+        </button>
         <button className="chip" onClick={onReset}>
           ✕ new song
         </button>

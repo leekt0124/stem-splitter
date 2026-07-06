@@ -13,6 +13,7 @@ transformer source-separation model), wrapped in a simple web UI.
 - 🎤 4-stem separation (vocals / drums / bass / other) with `htdemucs_ft`
 - 🎸 6-stem mode (adds guitar and piano) with `htdemucs_6s`
 - 🎚️ Web-based stem mixer: per-stem volume / mute / solo, synced waveforms, click-to-seek, per-stem download
+- 💾 Export your adjusted mix as wav — rendered instantly in the browser
 - 🔒 Runs fully locally — your audio never leaves your machine
 - ⚡ GPU-accelerated when CUDA is available (a 3-minute song separates in seconds on a modern GPU, a few minutes on CPU)
 
@@ -72,7 +73,7 @@ instant and everything stays in sync.
 - [x] Gradio MVP: upload → separate → play/download stems
 - [x] FastAPI backend (async jobs, stem download API)
 - [x] React stem mixer: synchronized playback, solo/mute/volume, waveforms, seek
-- [ ] Export the adjusted mix
+- [x] Export the adjusted mix as wav (rendered in-browser with OfflineAudioContext)
 - [ ] Pitch shift / time stretch
 - [ ] Beat grid + metronome, chord detection
 - [ ] Lyrics transcription (Whisper on the vocal stem)

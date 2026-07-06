@@ -64,6 +64,24 @@ export class StemEngine {
     this.gains.get(stem)?.gain.setTargetAtTime(value, this.ctx.currentTime, 0.01)
   }
 
+  /** Render all stems at the given gains to a single stereo wav, offline. */
+  async exportMix(gains: Record<string, number>): Promise<Blob> {
+    const sampleRate = this.ctx.sampleRate
+    const off = new OfflineAudioContext(2, Math.ceil(this.duration * sampleRate), sampleRate)
+    for (const [stem, buf] of this.buffers) {
+      const level = gains[stem] ?? 1
+      if (level <= 0) continue
+      const src = off.createBufferSource()
+      src.buffer = buf
+      const gain = off.createGain()
+      gain.gain.value = level
+      src.connect(gain).connect(off.destination)
+      src.start(0)
+    }
+    const { encodeWav } = await import('./wav')
+    return encodeWav(await off.startRendering())
+  }
+
   dispose(): void {
     this.stopSources()
     void this.ctx.close()
