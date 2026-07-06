@@ -1,0 +1,4 @@
+demucs>=4.0.1
+gradio>=5.0
+# newer torchaudio versions need torchcodec (+ system ffmpeg) to write audio files
+torchcodec

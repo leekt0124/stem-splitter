@@ -1,0 +1,16 @@
+# environments
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# separated stems and uploaded audio
+output/
+*.mp3
+*.wav
+*.flac
+*.m4a
+
+# gradio
+.gradio/
+flagged/
