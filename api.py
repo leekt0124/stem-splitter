@@ -7,6 +7,7 @@ Job flow: POST /api/separate (multipart upload) -> {job_id}
           GET  /api/jobs/{job_id}/stems/{stem} -> wav download
 """
 
+import os
 import shutil
 import threading
 import uuid
@@ -41,6 +42,29 @@ jobs: dict[str, dict] = {}
 _gpu_lock = threading.Lock()
 
 
+@app.on_event("startup")
+def _preload_models() -> None:
+    """Warm the default demucs model and whisper so the first job is fast.
+
+    Runs in a background thread — the server accepts requests immediately.
+    Disable with STEM_PRELOAD=0 (e.g. on low-memory machines).
+    """
+    if os.environ.get("STEM_PRELOAD", "1") == "0":
+        return
+
+    def warm():
+        from separator.core import _get_model
+        from separator.lyrics import _get_model as _get_whisper
+
+        try:
+            _get_model(DEFAULT_MODEL)
+            _get_whisper()
+        except Exception:
+            pass  # first real job will load (and surface) whatever failed
+
+    threading.Thread(target=warm, daemon=True).start()
+
+
 def _run_job(job_id: str, audio_path: Path, model_name: str) -> None:
     job = jobs[job_id]
     job["status"] = "running"
@@ -65,24 +89,33 @@ def _run_job(job_id: str, audio_path: Path, model_name: str) -> None:
         job["error"] = str(exc)
         return
 
-    # stems are usable now; tempo/beats/chords and lyrics arrive when ready
-    try:
-        job["analysis"] = analyze(stems)
-        job["analysis_status"] = "done"
-    except Exception as exc:
-        job["analysis_status"] = "error"
-        job["error"] = f"analysis failed: {exc}"
-
-    if "vocals" in stems:
+    # stems are usable now; tempo/beats/chords and lyrics arrive when ready.
+    # analysis is CPU-bound and lyrics is GPU-bound, so run them in parallel.
+    def run_analysis():
         try:
-            with _gpu_lock:  # whisper shares the GPU with separation jobs
+            job["analysis"] = analyze(stems)
+            job["analysis_status"] = "done"
+        except Exception as exc:
+            job["analysis_status"] = "error"
+            job["error"] = f"analysis failed: {exc}"
+
+    def run_lyrics():
+        if "vocals" not in stems:
+            job["lyrics_status"] = "done"
+            return
+        try:
+            with _gpu_lock:  # whisper shares the GPUs with separation jobs
                 job["lyrics"] = transcribe(stems["vocals"])
             job["lyrics_status"] = "done"
         except Exception as exc:
             job["lyrics_status"] = "error"
             job["error"] = f"lyrics failed: {exc}"
-    else:
-        job["lyrics_status"] = "done"
+
+    stages = [threading.Thread(target=run_analysis), threading.Thread(target=run_lyrics)]
+    for t in stages:
+        t.start()
+    for t in stages:
+        t.join()
 
 
 @app.get("/api/models")

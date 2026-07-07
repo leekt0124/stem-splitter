@@ -20,7 +20,11 @@ def _get_model():
         import torch
         import whisper
 
-        device = "cuda" if torch.cuda.is_available() else "cpu"
+        if torch.cuda.is_available():
+            # prefer the last GPU: separation prefers the first ones
+            device = f"cuda:{torch.cuda.device_count() - 1}"
+        else:
+            device = "cpu"
         _model = whisper.load_model(WHISPER_MODEL, device=device)
     return _model
 

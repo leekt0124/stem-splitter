@@ -19,7 +19,7 @@ transformer source-separation model), wrapped in a simple web UI.
 - 🎤 Synced lyrics, transcribed by Whisper from the *isolated vocals* (far more accurate than on the full mix) — karaoke-style highlighting, click a line to jump there
 - 💾 Export your adjusted mix as wav — rendered in the browser at the current pitch/speed
 - 🔒 Runs fully locally — your audio never leaves your machine
-- ⚡ GPU-accelerated when CUDA is available (a 3-minute song separates in seconds on a modern GPU, a few minutes on CPU)
+- ⚡ GPU-accelerated when CUDA is available (a 3-minute song separates in ~4 s on a modern GPU, a few minutes on CPU); multi-GPU machines run the `htdemucs_ft` sub-models in parallel, and models preload at server startup (disable with `STEM_PRELOAD=0`)
 
 ## Quickstart (Docker)
 

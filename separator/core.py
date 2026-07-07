@@ -5,6 +5,7 @@ FastAPI backend (Phase 2) can share it.
 """
 
 import contextlib
+import threading
 from pathlib import Path
 from typing import Callable
 
@@ -12,6 +13,13 @@ import torch
 from demucs.apply import BagOfModels, apply_model
 from demucs.audio import AudioFile, save_audio
 from demucs.pretrained import get_model
+
+# TF32 matmul on Ampere+ GPUs: ~1.3-2x faster transformer layers with
+# accuracy far above audio requirements (demucs was trained in float32,
+# but separation quality is insensitive at this precision).
+if torch.cuda.is_available():
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
 
 # model name -> short description shown in the UI
 MODELS = {
@@ -25,16 +33,29 @@ DEFAULT_MODEL = "htdemucs_ft"
 # Loading a model takes a few seconds (htdemucs_ft is a bag of 4 models),
 # so keep one loaded model per name for the lifetime of the process.
 _models: dict[str, torch.nn.Module] = {}
+_models_lock = threading.Lock()
+
+
+def _cuda_devices() -> list[str]:
+    return [f"cuda:{i}" for i in range(torch.cuda.device_count())]
 
 
 def _get_model(model_name: str):
     if model_name not in MODELS:
         raise ValueError(f"Unknown model {model_name!r}, expected one of {list(MODELS)}")
-    if model_name not in _models:
-        model = get_model(model_name)
-        model.eval()
-        _models[model_name] = model
-    return _models[model_name]
+    with _models_lock:
+        if model_name not in _models:
+            model = get_model(model_name)
+            model.eval()
+            # park each (sub-)model on its GPU once, instead of demucs's
+            # default CPU->GPU->CPU shuffle on every job
+            devices = _cuda_devices()
+            if devices:
+                subs = model.models if isinstance(model, BagOfModels) else [model]
+                for i, sub in enumerate(subs):
+                    sub.to(devices[i % len(devices)])
+            _models[model_name] = model
+        return _models[model_name]
 
 
 @contextlib.contextmanager
@@ -43,29 +64,86 @@ def _capture_progress(total_cycles: int, callback: Callable[[float], None]):
 
     demucs only exposes progress through the tqdm bar it wraps around its
     segment loop (one bar per model per shift), so we swap in a shim that
-    counts iterations across all bars instead of drawing anything.
+    counts iterations across all bars instead of drawing anything. Bars may
+    run concurrently (sub-models on different GPUs), so each bar tracks its
+    own fraction and the overall value is their sum.
     """
     import demucs.apply as _apply
 
     real_tqdm = _apply.tqdm
-    done_cycles = 0
+    lock = threading.Lock()
+    fracs: dict[int, float] = {}
+    next_id = iter(range(1_000_000))
 
     class _Shim:
         @staticmethod
         def tqdm(iterable, **_kwargs):
-            nonlocal done_cycles
+            with lock:
+                bar_id = next(next_id)
             items = list(iterable)
             total = max(len(items), 1)
             for i, item in enumerate(items):
                 yield item
-                callback(min((done_cycles + (i + 1) / total) / total_cycles, 1.0))
-            done_cycles += 1
+                with lock:
+                    fracs[bar_id] = (i + 1) / total
+                    overall = sum(fracs.values()) / total_cycles
+                callback(min(overall, 1.0))
 
     _apply.tqdm = _Shim
     try:
         yield
     finally:
         _apply.tqdm = real_tqdm
+
+
+def _apply_bag_multi_gpu(
+    model: BagOfModels, wav: torch.Tensor, show_progress: bool
+) -> torch.Tensor:
+    """Run a bag's sub-models across all GPUs in parallel.
+
+    Replicates the weighted average demucs.apply.apply_model computes for
+    BagOfModels, but with one worker thread per GPU instead of a serial loop.
+    """
+    devices = _cuda_devices()
+    per_device: dict[str, list[tuple[torch.nn.Module, list[float]]]] = {d: [] for d in devices}
+    for i, (sub, weights) in enumerate(zip(model.models, model.weights)):
+        per_device[devices[i % len(devices)]].append((sub, weights))
+
+    results: list[tuple[torch.Tensor, list[float]]] = []
+    errors: list[Exception] = []
+    lock = threading.Lock()
+
+    def worker(device: str, items):
+        try:
+            for sub, weights in items:
+                out = apply_model(
+                    sub, wav[None], device=device, split=True, progress=show_progress
+                )[0].cpu()
+                with lock:
+                    results.append((out, weights))
+        except Exception as exc:  # surface worker failures to the caller
+            with lock:
+                errors.append(exc)
+
+    threads = [
+        threading.Thread(target=worker, args=(d, items)) for d, items in per_device.items()
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    if errors:
+        raise errors[0]
+
+    estimates = torch.zeros_like(results[0][0])
+    totals = [0.0] * len(model.sources)
+    for out, weights in results:
+        for k, inst_weight in enumerate(weights):
+            estimates[k] += out[k] * inst_weight
+            totals[k] += inst_weight
+    for k, total in enumerate(totals):
+        estimates[k] /= total
+    return estimates
 
 
 def separate(
@@ -100,14 +178,21 @@ def separate(
         capture = _capture_progress(cycles, progress_callback)
     else:
         capture = contextlib.nullcontext()
+
+    want_bar = show_progress or progress_callback is not None
+    multi_gpu = (
+        isinstance(model, BagOfModels)
+        and len(model.models) > 1
+        and len(_cuda_devices()) > 1
+        and device.startswith("cuda")
+    )
     with capture:
-        sources = apply_model(
-            model,
-            wav[None],
-            device=device,
-            split=True,
-            progress=show_progress or progress_callback is not None,
-        )[0]
+        if multi_gpu:
+            sources = _apply_bag_multi_gpu(model, wav, show_progress=want_bar)
+        else:
+            sources = apply_model(
+                model, wav[None], device=device, split=True, progress=want_bar
+            )[0]
     sources = sources * ref.std() + ref.mean()
 
     stem_dir = Path(out_dir) / audio_path.stem / model_name
