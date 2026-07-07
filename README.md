@@ -10,8 +10,8 @@ transformer source-separation model), wrapped in a simple web UI.
 
 ## Features
 
-- 🎤 4-stem separation (vocals / drums / bass / other) with `htdemucs_ft`
-- 🎸 6-stem mode (adds guitar and piano) with `htdemucs_6s`
+- 🎸 6-stem separation by default (vocals / drums / bass / guitar / piano / other) with `htdemucs_6s`
+- 🎤 4-stem mode with `htdemucs_ft` for the highest-quality vocal/drum/bass isolation
 - 🎚️ Web-based stem mixer: per-stem volume / mute / solo, synced waveforms, click-to-seek, per-stem download
 - 🎼 Pitch shift (±6 semitones) and playback speed (0.5×–1.5×) — live, without stopping playback ([Signalsmith Stretch](https://github.com/Signalsmith-Audio/signalsmith-stretch))
 - 🥁 Automatic tempo + beat detection (on the isolated drums) with a metronome click

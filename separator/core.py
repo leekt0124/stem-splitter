@@ -24,17 +24,18 @@ if torch.cuda.is_available():
 
 # model name -> short description shown in the UI
 MODELS = {
-    "htdemucs_ft": "4 stems (vocals / drums / bass / other) — fine-tuned, best quality",
-    "htdemucs": "4 stems — single model, ~4x faster than ft",
-    "htdemucs_6s": "6 stems (adds guitar / piano) — experimental",
+    "htdemucs_6s": "6 stems (vocals / drums / bass / guitar / piano / other)",
+    "htdemucs_ft": "4 stems (vocals / drums / bass / other) — highest quality",
+    "htdemucs": "4 stems — fastest",
 }
 
-DEFAULT_MODEL = "htdemucs_ft"
+DEFAULT_MODEL = "htdemucs_6s"
 
 
 def default_model() -> str:
-    """htdemucs_ft on GPU; on CPU default to the 4x cheaper single model."""
-    return DEFAULT_MODEL if torch.cuda.is_available() else "htdemucs"
+    """htdemucs_6s everywhere: it's a single model, so it's as cheap as
+    htdemucs even on CPU (unlike the 4-model htdemucs_ft bag)."""
+    return DEFAULT_MODEL
 
 # Loading a model takes a few seconds (htdemucs_ft is a bag of 4 models),
 # so keep one loaded model per name for the lifetime of the process.
