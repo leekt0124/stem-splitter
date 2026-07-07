@@ -5,6 +5,7 @@ FastAPI backend (Phase 2) can share it.
 """
 
 import contextlib
+import os
 import threading
 from pathlib import Path
 from typing import Callable
@@ -29,6 +30,11 @@ MODELS = {
 }
 
 DEFAULT_MODEL = "htdemucs_ft"
+
+
+def default_model() -> str:
+    """htdemucs_ft on GPU; on CPU default to the 4x cheaper single model."""
+    return DEFAULT_MODEL if torch.cuda.is_available() else "htdemucs"
 
 # Loading a model takes a few seconds (htdemucs_ft is a bag of 4 models),
 # so keep one loaded model per name for the lifetime of the process.
@@ -186,12 +192,22 @@ def separate(
         and len(_cuda_devices()) > 1
         and device.startswith("cuda")
     )
+    # On CPU, torch's intra-op parallelism doesn't saturate the cores;
+    # letting demucs pipeline segments across a small thread pool measured
+    # ~3x faster on a 24-core machine. Ignored on GPU (demucs only pools
+    # when device is cpu).
+    cpu_workers = min(4, max(1, (os.cpu_count() or 4) // 4))
     with capture:
         if multi_gpu:
             sources = _apply_bag_multi_gpu(model, wav, show_progress=want_bar)
         else:
             sources = apply_model(
-                model, wav[None], device=device, split=True, progress=want_bar
+                model,
+                wav[None],
+                device=device,
+                split=True,
+                progress=want_bar,
+                num_workers=cpu_workers,
             )[0]
     sources = sources * ref.std() + ref.mean()
 

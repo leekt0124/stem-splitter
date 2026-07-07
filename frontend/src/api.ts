@@ -1,3 +1,12 @@
+export interface JobTimings {
+  device: string
+  separation_model: string
+  whisper_model: string
+  separation_s?: number
+  analysis_s?: number
+  lyrics_s?: number
+}
+
 export interface JobStatus {
   job_id: string
   status: 'queued' | 'running' | 'done' | 'error'
@@ -5,6 +14,7 @@ export interface JobStatus {
   model: string
   stems: string[]
   progress: number
+  timings: JobTimings
   error: string | null
 }
 

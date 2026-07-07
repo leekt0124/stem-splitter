@@ -3,7 +3,15 @@ import StemLane from './StemLane'
 import Timeline from './Timeline'
 import LyricsPanel from './LyricsPanel'
 import { StemEngine } from '../engine'
-import { getAnalysis, getLyrics, stemUrl, type Analysis, type Lyrics } from '../api'
+import {
+  getAnalysis,
+  getJob,
+  getLyrics,
+  stemUrl,
+  type Analysis,
+  type JobTimings,
+  type Lyrics,
+} from '../api'
 import { sortStems } from '../stems'
 
 const SPEEDS = [0.5, 0.75, 0.9, 1, 1.1, 1.25, 1.5]
@@ -34,6 +42,7 @@ export default function Mixer({ jobId, filename, engine, onReset }: Props) {
   const [analysis, setAnalysis] = useState<Analysis | null>(null)
   const [lyrics, setLyrics] = useState<Lyrics | null>(null)
   const [showLyrics, setShowLyrics] = useState(true)
+  const [timings, setTimings] = useState<JobTimings | null>(null)
   const raf = useRef(0)
 
   const audible = (s: string) =>
@@ -69,6 +78,12 @@ export default function Mixer({ jobId, filename, engine, onReset }: Props) {
           /* server briefly unreachable; retry */
         }
         await new Promise((r) => setTimeout(r, 2000))
+      }
+      try {
+        // all stages settled: grab the final per-stage timings
+        if (!stop) setTimings((await getJob(jobId)).timings)
+      } catch {
+        /* cosmetic only */
       }
     }
     void poll()
@@ -224,6 +239,16 @@ export default function Mixer({ jobId, filename, engine, onReset }: Props) {
 
       {lyrics && showLyrics && (
         <LyricsPanel lines={lyrics.lines} position={position} onSeek={(t) => engine.seek(t)} />
+      )}
+
+      {timings?.separation_s !== undefined && (
+        <div className="footnote">
+          ⏱ separation ({timings.separation_model}) {timings.separation_s}s
+          {timings.analysis_s !== undefined && ` · beats/chords ${timings.analysis_s}s`}
+          {timings.lyrics_s !== undefined &&
+            ` · lyrics (whisper ${timings.whisper_model}) ${timings.lyrics_s}s`}
+          {` · ${timings.device}`}
+        </div>
       )}
 
       {stems.map((s) => (

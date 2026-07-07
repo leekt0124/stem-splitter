@@ -8,10 +8,17 @@ with, and separation has already removed it.
 import os
 from pathlib import Path
 
-# whisper model name; "small" is a good speed/quality tradeoff for lyrics
-WHISPER_MODEL = os.environ.get("STEM_WHISPER_MODEL", "small")
-
 _model = None
+
+
+def _model_name() -> str:
+    """"small" on GPU; "base" on CPU (~3x faster, still fine for lyrics)."""
+    import torch
+
+    override = os.environ.get("STEM_WHISPER_MODEL")
+    if override:
+        return override
+    return "small" if torch.cuda.is_available() else "base"
 
 
 def _get_model():
@@ -25,7 +32,7 @@ def _get_model():
             device = f"cuda:{torch.cuda.device_count() - 1}"
         else:
             device = "cpu"
-        _model = whisper.load_model(WHISPER_MODEL, device=device)
+        _model = whisper.load_model(_model_name(), device=device)
     return _model
 
 

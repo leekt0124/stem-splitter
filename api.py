@@ -17,8 +17,12 @@ from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadF
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
+import time
+
 from separator import DEFAULT_MODEL, MODELS, separate
 from separator.analysis import analyze
+from separator.core import default_model
+from separator.lyrics import _model_name as whisper_model_name
 from separator.lyrics import transcribe
 
 UPLOAD_DIR = Path("uploads")
@@ -40,6 +44,12 @@ app.add_middleware(
 jobs: dict[str, dict] = {}
 # one separation at a time keeps GPU memory predictable
 _gpu_lock = threading.Lock()
+
+
+def _has_cuda() -> bool:
+    import torch
+
+    return torch.cuda.is_available()
 
 
 @app.on_event("startup")
@@ -74,6 +84,7 @@ def _run_job(job_id: str, audio_path: Path, model_name: str) -> None:
 
     try:
         with _gpu_lock:
+            t0 = time.perf_counter()
             stems = separate(
                 audio_path,
                 model_name,
@@ -81,6 +92,7 @@ def _run_job(job_id: str, audio_path: Path, model_name: str) -> None:
                 show_progress=False,
                 progress_callback=on_progress,
             )
+            job["timings"]["separation_s"] = round(time.perf_counter() - t0, 2)
         job["progress"] = 1.0
         job["stems"] = {name: str(path) for name, path in stems.items()}
         job["status"] = "done"
@@ -93,7 +105,9 @@ def _run_job(job_id: str, audio_path: Path, model_name: str) -> None:
     # analysis is CPU-bound and lyrics is GPU-bound, so run them in parallel.
     def run_analysis():
         try:
+            t0 = time.perf_counter()
             job["analysis"] = analyze(stems)
+            job["timings"]["analysis_s"] = round(time.perf_counter() - t0, 2)
             job["analysis_status"] = "done"
         except Exception as exc:
             job["analysis_status"] = "error"
@@ -105,7 +119,9 @@ def _run_job(job_id: str, audio_path: Path, model_name: str) -> None:
             return
         try:
             with _gpu_lock:  # whisper shares the GPUs with separation jobs
+                t0 = time.perf_counter()
                 job["lyrics"] = transcribe(stems["vocals"])
+                job["timings"]["lyrics_s"] = round(time.perf_counter() - t0, 2)
             job["lyrics_status"] = "done"
         except Exception as exc:
             job["lyrics_status"] = "error"
@@ -120,15 +136,16 @@ def _run_job(job_id: str, audio_path: Path, model_name: str) -> None:
 
 @app.get("/api/models")
 def list_models():
-    return {"models": MODELS, "default": DEFAULT_MODEL}
+    return {"models": MODELS, "default": default_model()}
 
 
 @app.post("/api/separate")
 def submit(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    model: str = Form(DEFAULT_MODEL),
+    model: str = Form(""),
 ):
+    model = model or default_model()
     if model not in MODELS:
         raise HTTPException(422, f"Unknown model {model!r}, expected one of {list(MODELS)}")
     suffix = Path(file.filename or "").suffix.lower()
@@ -152,6 +169,11 @@ def submit(
         "analysis_status": "pending",
         "lyrics": None,
         "lyrics_status": "pending",
+        "timings": {
+            "device": "cuda" if _has_cuda() else "cpu",
+            "separation_model": model,
+            "whisper_model": whisper_model_name(),
+        },
     }
     background_tasks.add_task(_run_job, job_id, audio_path, model)
     return {"job_id": job_id}
@@ -169,6 +191,7 @@ def job_status(job_id: str):
         "model": job["model"],
         "stems": sorted(job["stems"]),
         "progress": job["progress"],
+        "timings": job["timings"],
         "error": job["error"],
     }
 

@@ -264,6 +264,13 @@ select {
   background: rgba(255, 255, 255, 0.25);
 }
 
+.footnote {
+  color: #5b6274;
+  font-size: 12px;
+  margin: -4px 2px 10px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* lyrics */
 .lyrics {
   max-height: 168px;
