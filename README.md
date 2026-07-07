@@ -59,6 +59,19 @@ automatically on first use and cached under `~/.cache/torch`.
 
 There is also a simpler Gradio UI (no Node needed): `python app.py` → http://localhost:7860.
 
+### Accessing over the network
+
+If you open the app from another machine via plain `http://<server-ip>:8000`,
+browsers treat that as an insecure context and disable AudioWorklet, so the
+**pitch/speed controls are greyed out** (everything else works). To get them
+back, either tunnel the port so it's localhost on your machine:
+
+```bash
+ssh -L 8000:localhost:8000 user@server   # then open http://localhost:8000
+```
+
+or put the app behind HTTPS (e.g. a Caddy/nginx reverse proxy).
+
 ## REST API
 
 The FastAPI server that powers the mixer is also usable directly:

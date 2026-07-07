@@ -21,11 +21,17 @@ const SignalsmithStretch = (ctx: BaseAudioContext): Promise<StretchNode> => {
  * so playback rate and pitch (semitones) are live controls. All positions
  * and durations are in ORIGINAL song time — rate only changes how fast the
  * playhead moves through it, so waveforms, beats and chords never rescale.
+ *
+ * AudioWorklet only exists in secure contexts (HTTPS or localhost). When it
+ * is unavailable — e.g. the app opened via a LAN IP over plain http — the
+ * engine falls back to plain AudioBufferSourceNodes: everything works except
+ * live pitch/speed, and the UI disables those controls via `stretchAvailable`.
  */
 export class StemEngine {
   private ctx = new AudioContext()
   private gains = new Map<string, GainNode>()
   private nodes = new Map<string, StretchNode>()
+  private sources: AudioBufferSourceNode[] = [] // fallback (no-worklet) mode
   private startedAt = 0 // ctx time when playback last (re)started
   private offset = 0 // song position at startedAt, in original seconds
   buffers = new Map<string, AudioBuffer>()
@@ -33,6 +39,7 @@ export class StemEngine {
   duration = 0
   rate = 1
   semitones = 0
+  readonly stretchAvailable: boolean = this.ctx.audioWorklet !== undefined
 
   // metronome
   beats: number[] = []
@@ -55,14 +62,17 @@ export class StemEngine {
     this.buffers.set(stem, buf)
     this.duration = Math.max(this.duration, buf.duration)
 
-    const node = await SignalsmithStretch(this.ctx)
-    const right = buf.numberOfChannels > 1 ? buf.getChannelData(1) : buf.getChannelData(0)
-    await node.addBuffers([buf.getChannelData(0), right])
     const gain = this.ctx.createGain()
-    node.connect(gain)
     gain.connect(this.ctx.destination)
-    this.nodes.set(stem, node)
     this.gains.set(stem, gain)
+
+    if (this.stretchAvailable) {
+      const node = await SignalsmithStretch(this.ctx)
+      const right = buf.numberOfChannels > 1 ? buf.getChannelData(1) : buf.getChannelData(0)
+      await node.addBuffers([buf.getChannelData(0), right])
+      node.connect(gain)
+      this.nodes.set(stem, node)
+    }
   }
 
   get position(): number {
@@ -72,7 +82,7 @@ export class StemEngine {
   }
 
   play(): void {
-    if (this.playing || this.nodes.size === 0) return
+    if (this.playing || this.buffers.size === 0) return
     void this.ctx.resume()
     if (this.offset >= this.duration) this.offset = 0
     this.scheduleAll(this.offset)
@@ -84,6 +94,7 @@ export class StemEngine {
     if (!this.playing) return
     this.offset = this.position
     for (const node of this.nodes.values()) node.stop()
+    this.stopSources()
     this.playing = false
     this.cancelClicks()
   }
@@ -101,6 +112,7 @@ export class StemEngine {
 
   /** Live pitch/tempo change; playback continues from the current position. */
   setTransform(semitones: number, rate: number): void {
+    if (!this.stretchAvailable) return // controls are disabled in the UI
     const pos = this.position // read before rate changes: the getter depends on it
     this.semitones = semitones
     this.rate = rate
@@ -158,22 +170,45 @@ export class StemEngine {
   dispose(): void {
     this.cancelClicks()
     for (const node of this.nodes.values()) node.stop()
+    this.stopSources()
     void this.ctx.close()
   }
 
   private scheduleAll(fromPosition: number): void {
     const when = this.ctx.currentTime + 0.06
-    for (const node of this.nodes.values()) {
-      node.schedule({
-        output: when,
-        active: true,
-        input: fromPosition,
-        rate: this.rate,
-        semitones: this.semitones,
-      })
+    if (this.stretchAvailable) {
+      for (const node of this.nodes.values()) {
+        node.schedule({
+          output: when,
+          active: true,
+          input: fromPosition,
+          rate: this.rate,
+          semitones: this.semitones,
+        })
+      }
+    } else {
+      this.stopSources()
+      for (const [stem, buf] of this.buffers) {
+        const src = this.ctx.createBufferSource()
+        src.buffer = buf
+        src.connect(this.gains.get(stem)!)
+        src.start(when, fromPosition)
+        this.sources.push(src)
+      }
     }
     this.startedAt = when
     this.offset = fromPosition
+  }
+
+  private stopSources(): void {
+    for (const s of this.sources) {
+      try {
+        s.stop()
+      } catch {
+        /* not started yet or already done */
+      }
+    }
+    this.sources = []
   }
 
   private scheduleClicks(): void {

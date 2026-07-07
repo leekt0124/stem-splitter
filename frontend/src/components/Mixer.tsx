@@ -166,22 +166,42 @@ export default function Mixer({ jobId, filename, engine, onReset }: Props) {
           {fmt(position)} / {fmt(engine.duration)}
         </span>
 
-        <span className="control-group" title="Pitch shift (semitones)">
-          <button className="chip" onClick={() => changePitch(-1)}>
+        <span
+          className="control-group"
+          title={
+            engine.stretchAvailable
+              ? 'Pitch shift (semitones)'
+              : 'Pitch/speed need a secure context — open the app via localhost or HTTPS'
+          }
+        >
+          <button
+            className="chip"
+            disabled={!engine.stretchAvailable}
+            onClick={() => changePitch(-1)}
+          >
             −
           </button>
           <span className="control-value">
             {semitones > 0 ? `+${semitones}` : semitones} st
           </span>
-          <button className="chip" onClick={() => changePitch(1)}>
+          <button
+            className="chip"
+            disabled={!engine.stretchAvailable}
+            onClick={() => changePitch(1)}
+          >
             +
           </button>
         </span>
 
         <select
           className="speed-select"
-          title="Playback speed"
+          title={
+            engine.stretchAvailable
+              ? 'Playback speed'
+              : 'Pitch/speed need a secure context — open the app via localhost or HTTPS'
+          }
           value={speed}
+          disabled={!engine.stretchAvailable}
           onChange={(e) => changeSpeed(Number(e.target.value))}
         >
           {SPEEDS.map((s) => (
