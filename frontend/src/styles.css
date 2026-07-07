@@ -264,6 +264,23 @@ select {
   background: rgba(255, 255, 255, 0.25);
 }
 
+.warn-banner {
+  background: #3a2a12;
+  border: 1px solid #7c5a1d;
+  color: #fbd38d;
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.warn-banner code {
+  background: #2b1f0e;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
 .footnote {
   color: #5b6274;
   font-size: 12px;

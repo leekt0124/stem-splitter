@@ -117,7 +117,7 @@ export default function Mixer({ jobId, filename, engine, onReset }: Props) {
   }
 
   const changePitch = (delta: number) => {
-    const next = Math.max(-6, Math.min(6, semitones + delta))
+    const next = Math.max(-12, Math.min(12, semitones + delta))
     setSemitones(next)
     engine.setTransform(next, speed)
   }
@@ -158,6 +158,14 @@ export default function Mixer({ jobId, filename, engine, onReset }: Props) {
 
   return (
     <div className="mixer">
+      {!engine.stretchAvailable && (
+        <div className="warn-banner">
+          ⚠ Pitch &amp; speed are disabled: this page was opened over an insecure connection
+          (http on a non-localhost address), where browsers turn off AudioWorklet. Open the app
+          via <code>http://localhost:8000</code> (e.g. <code>ssh -L 8000:localhost:8000 …</code>)
+          or serve it over HTTPS to enable them.
+        </div>
+      )}
       <div className="transport">
         <button className="play-btn" onClick={togglePlay}>
           {playing ? '⏸' : '▶'}

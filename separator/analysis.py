@@ -39,6 +39,7 @@ def _detect_beats(drums_path: Path) -> tuple[float, list[float]]:
 
 def _detect_chords(harmonic_paths: list[Path]) -> list[dict]:
     import librosa
+    import scipy.ndimage
 
     # sum the non-drum stems into one "harmony" signal
     signals = [librosa.load(p, sr=SR, mono=True)[0] for p in harmonic_paths]
@@ -48,16 +49,36 @@ def _detect_chords(harmonic_paths: list[Path]) -> list[dict]:
         y[: len(s)] += s
 
     chroma = librosa.feature.chroma_cqt(y=y, sr=SR, hop_length=CHROMA_HOP)
+    # median-filter over time: suppresses melody notes and transients that
+    # don't belong to the underlying harmony
+    chroma = scipy.ndimage.median_filter(chroma, size=(1, 5), mode="nearest")
+
     labels, templates = _chord_templates()
 
-    # frame-wise template similarity -> emission probabilities
-    scores = templates @ (chroma / (chroma.sum(axis=0, keepdims=True) + 1e-9))
-    prob = scores / (scores.sum(axis=0, keepdims=True) + 1e-9)
+    # cosine similarity between chroma frames and chord templates, sharpened
+    # with a softmax so Viterbi sees a real contrast between candidates
+    # (raw similarities of related chords, e.g. C vs Am, differ only slightly)
+    tn = templates / (np.linalg.norm(templates, axis=1, keepdims=True) + 1e-9)
+    cn = chroma / (np.linalg.norm(chroma, axis=0, keepdims=True) + 1e-9)
+    sim = tn @ cn
+    BETA = 15.0
+    prob = np.exp(BETA * (sim - sim.max(axis=0, keepdims=True)))
+
+    # energy gate: quiet frames are "no chord" (label N, index 0),
+    # regardless of what noise-floor chroma looks like
+    rms = librosa.feature.rms(y=y, frame_length=CHROMA_HOP, hop_length=CHROMA_HOP)[0]
+    n_frames = min(prob.shape[1], len(rms))
+    prob = prob[:, :n_frames]
+    rms_db = 20 * np.log10(rms[:n_frames] + 1e-10)
+    quiet = rms_db < max(rms_db.max() - 40, -60)
+    prob[0, :] = 1e-6
+    prob[0, quiet] = 1e6
+    prob /= prob.sum(axis=0, keepdims=True)
 
     # Viterbi smoothing: strongly prefer staying on the same chord
     n = len(labels)
-    transition = np.full((n, n), 0.1 / (n - 1))
-    np.fill_diagonal(transition, 0.9)
+    transition = np.full((n, n), 0.05 / (n - 1))
+    np.fill_diagonal(transition, 0.95)
     states = librosa.sequence.viterbi(prob, transition)
 
     times = librosa.frames_to_time(np.arange(chroma.shape[1] + 1), sr=SR, hop_length=CHROMA_HOP)
