@@ -14,6 +14,8 @@ interface Props {
   onToggleMute: () => void
   onToggleSolo: () => void
   onSeek: (fraction: number) => void
+  onScore?: () => void
+  scoreOpen?: boolean
 }
 
 export default function StemLane(p: Props) {
@@ -43,6 +45,15 @@ export default function StemLane(p: Props) {
           <a className="chip" title="Download stem" href={p.downloadUrl} download={`${p.name}.wav`}>
             ⬇
           </a>
+          {p.onScore && (
+            <button
+              className={`chip ${p.scoreOpen ? 'chip-active-solo' : ''}`}
+              title="Sheet music (auto-transcribed)"
+              onClick={p.onScore}
+            >
+              ♪
+            </button>
+          )}
         </div>
         <input
           type="range"

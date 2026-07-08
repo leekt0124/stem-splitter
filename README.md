@@ -17,6 +17,7 @@ transformer source-separation model), wrapped in a simple web UI.
 - 🥁 Automatic tempo + beat detection (on the isolated drums) with a metronome click
 - 🎹 Chord detection (on the drum-free mix) shown as a clickable timeline
 - 🎤 Synced lyrics, transcribed by Whisper from the *isolated vocals* (far more accurate than on the full mix) — karaoke-style highlighting, click a line to jump there
+- 🎼 Sheet music per stem: [basic-pitch](https://github.com/spotify/basic-pitch) transcribes the isolated stem to notes, quantized against the detected tempo and rendered in-browser ([OSMD](https://opensheetmusicdisplay.org/)) — with MIDI / MusicXML download. Approximate by nature, but a real head start for learning a part
 - 💾 Export your adjusted mix as wav — rendered in the browser at the current pitch/speed
 - 🔒 Runs fully locally — your audio never leaves your machine
 - ⚡ Fast on any hardware: multi-GPU machines run the `htdemucs_ft` sub-models in parallel (~4 s for a 3-minute song); CPU-only machines get parallel segment processing and automatically lighter defaults (`htdemucs` + whisper `base`, ~30–60 s for a 3-minute song on a modern desktop CPU). Models preload at server startup (`STEM_PRELOAD=0` to disable), and every job reports per-stage timings (shown under the transport bar and in the API)
@@ -46,6 +47,7 @@ git clone https://github.com/leekt0124/stem-splitter.git
 cd stem-splitter
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+pip install --no-deps basic-pitch   # sheet music; --no-deps: its pins predate py3.13
 
 # build the mixer frontend once
 (cd frontend && npm install && npm run build)

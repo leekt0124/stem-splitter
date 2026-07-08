@@ -76,3 +76,14 @@ export const getLyrics = (id: string) =>
   )
 
 export const stemUrl = (id: string, stem: string) => `/api/jobs/${id}/stems/${stem}`
+
+export interface ScoreStatus {
+  status: 'pending' | 'done' | 'error'
+  musicxml: string | null
+  error: string | null
+}
+
+export const getScore = (id: string, stem: string) =>
+  fetch(`/api/jobs/${id}/score/${stem}`).then((r) => json<ScoreStatus>(r))
+
+export const scoreMidiUrl = (id: string, stem: string) => `/api/jobs/${id}/score/${stem}/midi`

@@ -15,7 +15,7 @@ from pathlib import Path
 
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
 import time
 
@@ -24,6 +24,7 @@ from separator.analysis import analyze
 from separator.core import default_model
 from separator.lyrics import _model_name as whisper_model_name
 from separator.lyrics import transcribe
+from separator.score import UNSCORABLE_STEMS, transcribe_stem
 
 UPLOAD_DIR = Path("uploads")
 OUTPUT_DIR = Path("output")
@@ -169,6 +170,7 @@ def submit(
         "analysis_status": "pending",
         "lyrics": None,
         "lyrics_status": "pending",
+        "scores": {},  # stem -> {status, musicxml, midi, error}; generated on demand
         "timings": {
             "device": "cuda" if _has_cuda() else "cpu",
             "separation_model": model,
@@ -210,6 +212,47 @@ def job_lyrics(job_id: str):
     if job is None:
         raise HTTPException(404, "No such job")
     return {"status": job["lyrics_status"], "lyrics": job["lyrics"]}
+
+
+def _generate_score(job: dict, stem: str) -> None:
+    entry = job["scores"][stem]
+    try:
+        tempo = (job.get("analysis") or {}).get("tempo") or 120.0
+        result = transcribe_stem(job["stems"][stem], tempo, stem)
+        entry.update(musicxml=result["musicxml"], midi=result["midi"], status="done")
+    except Exception as exc:
+        entry.update(status="error", error=str(exc))
+
+
+@app.get("/api/jobs/{job_id}/score/{stem}")
+def stem_score(job_id: str, stem: str, background_tasks: BackgroundTasks):
+    """Poll (and lazily start) sheet-music transcription for one stem."""
+    job = jobs.get(job_id)
+    if job is None:
+        raise HTTPException(404, "No such job")
+    if stem in UNSCORABLE_STEMS:
+        raise HTTPException(422, f"No pitched transcription for {stem!r}")
+    if stem not in job["stems"]:
+        raise HTTPException(404, f"No stem {stem!r} for this job")
+
+    if stem not in job["scores"]:
+        job["scores"][stem] = {"status": "pending", "musicxml": None, "midi": None, "error": None}
+        background_tasks.add_task(_generate_score, job, stem)
+    entry = job["scores"][stem]
+    return {"status": entry["status"], "musicxml": entry["musicxml"], "error": entry["error"]}
+
+
+@app.get("/api/jobs/{job_id}/score/{stem}/midi")
+def stem_score_midi(job_id: str, stem: str):
+    job = jobs.get(job_id)
+    entry = (job or {}).get("scores", {}).get(stem)
+    if not entry or entry["status"] != "done":
+        raise HTTPException(404, "Score not generated yet")
+    return Response(
+        entry["midi"],
+        media_type="audio/midi",
+        headers={"Content-Disposition": f'attachment; filename="{stem}.mid"'},
+    )
 
 
 @app.get("/api/jobs/{job_id}/stems/{stem}")

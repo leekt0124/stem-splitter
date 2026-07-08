@@ -7,3 +7,11 @@ uvicorn[standard]
 python-multipart
 librosa
 openai-whisper
+# sheet-music transcription. basic-pitch itself must be installed with
+# --no-deps (its pins predate python 3.13; the ONNX backend works fine
+# with the modern deps below):  pip install --no-deps basic-pitch
+music21
+onnxruntime
+pretty_midi
+mir_eval
+resampy

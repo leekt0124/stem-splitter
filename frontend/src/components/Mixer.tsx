@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import StemLane from './StemLane'
 import Timeline from './Timeline'
 import LyricsPanel from './LyricsPanel'
+import ScorePanel from './ScorePanel'
 import { StemEngine } from '../engine'
 import {
   getAnalysis,
@@ -43,6 +44,7 @@ export default function Mixer({ jobId, filename, engine, onReset }: Props) {
   const [lyrics, setLyrics] = useState<Lyrics | null>(null)
   const [showLyrics, setShowLyrics] = useState(true)
   const [timings, setTimings] = useState<JobTimings | null>(null)
+  const [scoreStem, setScoreStem] = useState<string | null>(null)
   const raf = useRef(0)
 
   const audible = (s: string) =>
@@ -294,8 +296,14 @@ export default function Mixer({ jobId, filename, engine, onReset }: Props) {
           onToggleMute={() => setMuted(toggleIn(muted, s))}
           onToggleSolo={() => setSolo(toggleIn(solo, s))}
           onSeek={(f) => engine.seek(f * engine.duration)}
+          onScore={s === 'drums' ? undefined : () => setScoreStem(scoreStem === s ? null : s)}
+          scoreOpen={scoreStem === s}
         />
       ))}
+
+      {scoreStem && (
+        <ScorePanel jobId={jobId} stem={scoreStem} onClose={() => setScoreStem(null)} />
+      )}
     </div>
   )
 }
