@@ -11,6 +11,7 @@ interface Props {
 export default function ScorePanel({ jobId, stem, onClose }: Props) {
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading')
   const [error, setError] = useState('')
+  const [pdfBusy, setPdfBusy] = useState(false)
   const xmlRef = useRef<string | null>(null)
   const sheetRef = useRef<HTMLDivElement>(null)
 
@@ -65,6 +66,47 @@ export default function ScorePanel({ jobId, stem, onClose }: Props) {
     URL.revokeObjectURL(url)
   }
 
+  const downloadPdf = async () => {
+    if (!xmlRef.current || pdfBusy) return
+    setPdfBusy(true)
+    // render an A4-paginated copy off-screen, then convert each SVG page
+    // into a PDF page (same approach as OSMD's official pdf demo)
+    const holder = document.createElement('div')
+    holder.style.cssText = 'position:absolute;left:-100000px;top:0;width:794px;background:#fff'
+    document.body.appendChild(holder)
+    try {
+      const [{ OpenSheetMusicDisplay }, { jsPDF }] = await Promise.all([
+        import('opensheetmusicdisplay'),
+        import('jspdf'),
+      ])
+      await import('svg2pdf.js') // adds .svg() to jsPDF
+      const osmd = new OpenSheetMusicDisplay(holder, {
+        autoResize: false,
+        drawTitle: true,
+        drawSubtitle: false,
+        drawPartNames: false,
+        pageFormat: 'A4_P',
+        pageBackgroundColor: '#FFFFFF',
+      })
+      await osmd.load(xmlRef.current)
+      osmd.render()
+      const pages = Array.from(holder.querySelectorAll('svg'))
+      if (pages.length === 0) throw new Error('nothing rendered')
+      const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' })
+      for (let i = 0; i < pages.length; i++) {
+        if (i > 0) pdf.addPage()
+        await pdf.svg(pages[i], { x: 0, y: 0, width: 210, height: 297 })
+      }
+      pdf.save(`${stem}.pdf`)
+    } catch (e) {
+      setError(String(e))
+      setState('error')
+    } finally {
+      holder.remove()
+      setPdfBusy(false)
+    }
+  }
+
   return (
     <div className="score-panel">
       <div className="score-header">
@@ -74,6 +116,9 @@ export default function ScorePanel({ jobId, stem, onClose }: Props) {
         </span>
         {state === 'ready' && (
           <>
+            <button className="chip" onClick={downloadPdf} disabled={pdfBusy}>
+              {pdfBusy ? 'rendering…' : '⬇ pdf'}
+            </button>
             <a className="chip" href={scoreMidiUrl(jobId, stem)} download={`${stem}.mid`}>
               ⬇ midi
             </a>

@@ -6,4 +6,11 @@ export default defineConfig({
   server: {
     proxy: { '/api': 'http://localhost:8000' },
   },
+  build: {
+    rollupOptions: {
+      // optional jspdf features we never call (canvas rasterization, .html());
+      // leave their lazy imports unresolved instead of bundling them
+      external: ['canvg', 'html2canvas', 'dompurify'],
+    },
+  },
 })

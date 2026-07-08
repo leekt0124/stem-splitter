@@ -49,6 +49,7 @@ def _build_score(note_events, tempo: float, title: str):
         quantized.setdefault(offset, []).append((int(pitch), q_len / DIVISIONS_PER_BEAT))
 
     part = stream.Part()
+    part.partName = title.split(" — ")[0]
     pitches_all = [p for notes_at in quantized.values() for p, _ in notes_at]
     if pitches_all and sum(pitches_all) / len(pitches_all) < 57:  # below ~A3
         part.append(clef.BassClef())
