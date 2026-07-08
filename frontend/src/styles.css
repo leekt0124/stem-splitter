@@ -204,13 +204,34 @@ select {
 }
 
 /* chord + beat timeline */
+.timeline-outer {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.timeline-scroll {
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 1px solid #232838;
+  border-radius: 10px;
+  background: #12151d;
+  scrollbar-width: thin;
+}
+
+.timeline-zoom {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+}
+
 .timeline {
   position: relative;
   height: 46px;
-  background: #12151d;
-  border: 1px solid #232838;
-  border-radius: 10px;
-  margin-bottom: 12px;
+  min-width: 100%;
   overflow: hidden;
   cursor: pointer;
 }
